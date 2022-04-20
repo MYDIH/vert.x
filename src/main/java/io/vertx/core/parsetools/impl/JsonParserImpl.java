@@ -148,7 +148,6 @@ public class JsonParserImpl implements JsonParser {
     byte[] bytes = data.getBytes();
     try {
       parser.feedInput(bytes, 0, bytes.length);
-      checkTokens();
     } catch (IOException e) {
       if (exceptionHandler != null) {
         exceptionHandler.handle(e);
@@ -157,6 +156,7 @@ public class JsonParserImpl implements JsonParser {
         throw new DecodeException(e.getMessage(), e);
       }
     }
+    checkTokens();
     checkPending();
   }
 
@@ -167,77 +167,76 @@ public class JsonParserImpl implements JsonParser {
     }
     ended = true;
     parser.endOfInput();
-    try {
-      checkTokens();
-    } catch (IOException e) {
-      if (exceptionHandler != null) {
-        exceptionHandler.handle(e);
-        return;
-      } else {
-        throw new DecodeException(e.getMessage(), e);
-      }
-    }
+    checkTokens();
     checkPending();
   }
 
-  private void checkTokens() throws IOException {
+  private void checkTokens() {
     while (true) {
-      JsonToken token = parser.nextToken();
-      if (token == null || token == JsonToken.NOT_AVAILABLE) {
-        break;
+      try {
+        JsonToken token = parser.nextToken();
+        if (token == null || token == JsonToken.NOT_AVAILABLE) {
+          break;
+        }
+        String field = currentField;
+        currentField = null;
+        JsonEventImpl event;
+        switch (token) {
+          case START_OBJECT: {
+            event = new JsonEventImpl(token, JsonEventType.START_OBJECT, field, null);
+            break;
+          }
+          case START_ARRAY: {
+            event = new JsonEventImpl(token, JsonEventType.START_ARRAY, field, null);
+            break;
+          }
+          case FIELD_NAME: {
+            currentField = parser.getCurrentName();
+            continue;
+          }
+          case VALUE_STRING: {
+            event = new JsonEventImpl(token, JsonEventType.VALUE, field, parser.getText());
+            break;
+          }
+          case VALUE_TRUE: {
+            event = new JsonEventImpl(token, JsonEventType.VALUE, field, Boolean.TRUE);
+            break;
+          }
+          case VALUE_FALSE: {
+            event = new JsonEventImpl(token, JsonEventType.VALUE, field, Boolean.FALSE);
+            break;
+          }
+          case VALUE_NULL: {
+            event = new JsonEventImpl(token, JsonEventType.VALUE, field, null);
+            break;
+          }
+          case VALUE_NUMBER_INT: {
+            event = new JsonEventImpl(token, JsonEventType.VALUE, field, parser.getLongValue());
+            break;
+          }
+          case VALUE_NUMBER_FLOAT: {
+            event = new JsonEventImpl(token, JsonEventType.VALUE, field, parser.getDoubleValue());
+            break;
+          }
+          case END_OBJECT: {
+            event = new JsonEventImpl(token, JsonEventType.END_OBJECT, null, null);
+            break;
+          }
+          case END_ARRAY: {
+            event = new JsonEventImpl(token, JsonEventType.END_ARRAY, null, null);
+            break;
+          }
+          default:
+            throw new UnsupportedOperationException("Token " + token + " not implemented");
+        }
+        pending.add(event);
+      } catch (IOException e) {
+        if (exceptionHandler != null) {
+          exceptionHandler.handle(e);
+        } else {
+          throw new DecodeException(e.getMessage(), e);
+        }
       }
-      String field = currentField;
-      currentField = null;
-      JsonEventImpl event;
-      switch (token) {
-        case START_OBJECT: {
-          event = new JsonEventImpl(token, JsonEventType.START_OBJECT, field, null);
-          break;
-        }
-        case START_ARRAY: {
-          event = new JsonEventImpl(token, JsonEventType.START_ARRAY, field, null);
-          break;
-        }
-        case FIELD_NAME: {
-          currentField = parser.getCurrentName();
-          continue;
-        }
-        case VALUE_STRING: {
-          event = new JsonEventImpl(token, JsonEventType.VALUE, field, parser.getText());
-          break;
-        }
-        case VALUE_TRUE: {
-          event = new JsonEventImpl(token, JsonEventType.VALUE, field, Boolean.TRUE);
-          break;
-        }
-        case VALUE_FALSE: {
-          event = new JsonEventImpl(token, JsonEventType.VALUE, field, Boolean.FALSE);
-          break;
-        }
-        case VALUE_NULL: {
-          event = new JsonEventImpl(token, JsonEventType.VALUE, field, null);
-          break;
-        }
-        case VALUE_NUMBER_INT: {
-          event = new JsonEventImpl(token, JsonEventType.VALUE, field, parser.getLongValue());
-          break;
-        }
-        case VALUE_NUMBER_FLOAT: {
-          event = new JsonEventImpl(token, JsonEventType.VALUE, field, parser.getDoubleValue());
-          break;
-        }
-        case END_OBJECT: {
-          event = new JsonEventImpl(token, JsonEventType.END_OBJECT, null, null);
-          break;
-        }
-        case END_ARRAY: {
-          event = new JsonEventImpl(token, JsonEventType.END_ARRAY, null, null);
-          break;
-        }
-        default:
-          throw new UnsupportedOperationException("Token " + token + " not implemented");
-      }
-      pending.add(event);
     }
   }
 
